@@ -1,259 +1,228 @@
 import os
+import sys
+import argparse
 import tkinter as tk
 from tkinter import filedialog, messagebox
-import subprocess
-import shutil
-import sys
 
-def _is_zenity_available():
-    """Checks if 'zenity' command is available on the system."""
-    return shutil.which('zenity') is not None
 
-_USE_ZENITY = _is_zenity_available()
+STATIC_OUTPUT_BASE = "~/Desktop/Projects/Document_Project/output_docs"
+
+def _get_tkinter_root():
+    """Create and return a hidden Tk root."""
+    if tk._default_root:
+        return tk._default_root
+
+    root = tk.Tk()
+    root.withdraw()
+    root.attributes("-topmost", True)
+    root.focus_force()
+    return root
+
 
 def show_info(title, message):
-    """Shows an info message box, using zenity if available."""
-    if _USE_ZENITY:
-        try:
-            subprocess.run(
-                ['zenity', '--info', f'--title={title}', f'--text={message}'],
-                check=True
-            )
-        except (subprocess.CalledProcessError, FileNotFoundError):
-            _show_info_tkinter(title, message)
-    else:
-        _show_info_tkinter(title, message)
-
-def show_error(title, message):
-    """Shows an error message box, using zenity if available."""
-    if _USE_ZENITY:
-        try:
-            subprocess.run(
-                ['zenity', '--error', f'--title={title}', f'--text={message}'],
-                check=True
-            )
-        except (subprocess.CalledProcessError, FileNotFoundError):
-            _show_error_tkinter(title, message)
-    else:
-        _show_error_tkinter(title, message)
-
-def ask_directory(title):
-    """Asks for a directory, using zenity if available."""
-    if _USE_ZENITY:
-        try:
-            result = subprocess.run(
-                ['zenity', '--file-selection', '--directory', f'--title={title}'],
-                capture_output=True, text=True, check=True
-            )
-            # .strip() is crucial to remove trailing newlines
-            return result.stdout.strip()
-        except subprocess.CalledProcessError:
-            # User likely clicked "Cancel" (non-zero exit code)
-            return None
-        except FileNotFoundError:
-            return _ask_directory_tkinter(title)
-    else:
-        return _ask_directory_tkinter(title)
-
-def ask_save_file(title):
-    """Asks for a save-file path, using zenity if available."""
-    if _USE_ZENITY:
-        try:
-            result = subprocess.run(
-                [
-                    'zenity', '--file-selection', '--save', '--confirm-overwrite',
-                    f'--title={title}',
-                    '--file-filter=Text Files (*.txt) | *.txt',
-                    '--file-filter=All Files (*.*) | *'
-                ],
-                capture_output=True, text=True, check=True
-            )
-            path = result.stdout.strip()
-            # Zenity doesn't automatically add the extension
-            if not path.lower().endswith('.txt'):
-                path += '.txt'
-            return path
-        except subprocess.CalledProcessError:
-            # User likely clicked "Cancel"
-            return None
-        except FileNotFoundError:
-            return _ask_save_file_tkinter(title)
-    else:
-        return _ask_save_file_tkinter(title)
-
-# --- Original Tkinter Fallbacks ---
-
-def _setup_tkinter_root():
-    """Creates a hidden root window for Tkinter dialogs."""
-    if not tk._default_root:
-        root = tk.Tk()
-        root.withdraw()
-        return root
-    return tk._default_root
-
-def _show_info_tkinter(title, message):
-    _setup_tkinter_root()
+    _get_tkinter_root()
     messagebox.showinfo(title, message)
 
-def _show_error_tkinter(title, message):
-    _setup_tkinter_root()
+
+def show_error(title, message):
+    _get_tkinter_root()
     messagebox.showerror(title, message)
 
-def _ask_directory_tkinter(title):
-    _setup_tkinter_root()
+
+def ask_directory(title):
+    _get_tkinter_root()
     return filedialog.askdirectory(title=title)
 
-def _ask_save_file_tkinter(title):
-    _setup_tkinter_root()
-    return filedialog.asksaveasfilename(
-        title=title,
-        defaultextension=".txt",
-        filetypes=[("Text Files", "*.txt"), ("All Files", "*.*")]
-    )
 
-# --- Main Application Logic ---
-
-def document_code_files():
+def document_project_core(project_dir):
     """
-    Walks through a selected directory, finds code and media files,
-    and writes their paths and contents to a single text file.
+    Scans a project directory, documents all files not excluded, and logs scanning results.
+    Returns a tuple (output_file, stats_dict).
     """
-    # --- Configuration ---
-    CODE_EXTENSIONS = {
-        '.py', '.js', '.ts', '.java', '.c', '.cpp', '.h', '.hpp', '.cs',
-        '.html', '.css', '.scss', '.go', '.rs', '.swift', '.kt', '.rb',
-        '.php', '.pl', '.sh', '.bat', '.sql', '.xml', '.json', '.yml', '.yaml',
-        '.md', '.r', '.m', '.lua', '.toml', '.ini', 'dockerfile'
-    }
-    
-    # NEW: Extensions for media/asset files to list
-    MEDIA_EXTENSIONS = {
-        # Images
-        '.png', '.jpg', '.jpeg', '.gif', '.bmp', '.svg', '.webp', '.ico',
-        # Fonts
-        '.ttf', '.otf', '.woff', '.woff2',
-        # Audio
-        '.mp3', '.wav', '.ogg', '.flac',
-        # Video
-        '.mp4', '.webm', '.mkv', '.avi',
-        # Docs
-        '.pdf'
-    }
 
     EXCLUDED_DIRS = {
-        'node_modules', 'venv', '.venv', '.git', '__pycache__',
-        '.vscode', '.idea', 'build', 'dist', 'target', 'env', '.DS_Store'
+        "node_modules",
+        "venv",
+        ".venv",
+        ".git",
+        "__pycache__",
+        ".vscode",
+        ".idea",
+        "build",
+        "dist",
+        "target",
+        "env",
+        "output_docs",
+        ".next",
     }
-    
+
+    EXCLUDED_EXTENSIONS = {
+        ".png",
+        ".jpg",
+        ".jpeg",
+        ".gif",
+        ".bmp",
+        ".svg",
+        ".webp",
+        ".ico",
+        ".csv",
+        ".ttf",
+        ".otf",
+        ".woff",
+        ".woff2",
+        ".mp3",
+        ".wav",
+        ".ogg",
+        ".flac",
+        ".mp4",
+        ".webm",
+        ".mkv",
+        ".avi",
+        ".pdf",
+        ".env",
+    }
+
     EXCLUDED_FILES = {
-        'package-lock.json', 'yarn.lock', 'poetry.lock'
+        "package-lock.json",
+        "yarn.lock",
+        "poetry.lock",
+        ".env",
     }
 
-    # --- 1. Prompt user to select the project directory ---
-    show_info(
-        "Code Documenter",
-        "Please select the project directory you want to document."
-    )
-    project_dir = ask_directory(title="Select Project Directory")
+    project_dir = os.path.abspath(project_dir)
+    folder_name = os.path.basename(os.path.normpath(project_dir))
 
+    output_dir = os.path.expanduser(STATIC_OUTPUT_BASE)
+    os.makedirs(output_dir, exist_ok=True)
+
+    output_file = os.path.join(output_dir, f"{folder_name}.txt")
+
+    included_files = []
+    excluded_files = []
+    excluded_dirs_log = []
+    scanned_dirs = []
+    scanned_files = []
+
+    print(f"Scanning project: {project_dir}")
+    print(f"Output file:      {output_file}\n")
+
+    try:
+        with open(output_file, "w", encoding="utf-8") as outfile:
+
+            for dirpath, dirnames, filenames in os.walk(project_dir, topdown=True):
+                rel_dir = os.path.relpath(dirpath, project_dir)
+                scanned_dirs.append(rel_dir)
+                removed = [d for d in dirnames if d in EXCLUDED_DIRS]
+                for d in removed:
+                    excluded_dirs_log.append(
+                        os.path.relpath(os.path.join(dirpath, d), project_dir)
+                    )
+                dirnames[:] = [d for d in dirnames if d not in EXCLUDED_DIRS]
+                for filename in filenames:
+                    rel_path = os.path.relpath(
+                        os.path.join(dirpath, filename), project_dir
+                    )
+                    scanned_files.append(rel_path)
+                    ext = os.path.splitext(filename)[1].lower()
+                    if filename in EXCLUDED_FILES or ext in EXCLUDED_EXTENSIONS:
+                        excluded_files.append(rel_path)
+                        continue
+                    included_files.append(rel_path)
+                    print(f"Including: {rel_path}")
+                    outfile.write(f"--- FILE: {rel_path} ---\n\n")
+                    full_path = os.path.join(dirpath, filename)
+                    try:
+                        with open(
+                            full_path, "r", encoding="utf-8", errors="ignore"
+                        ) as infile:
+                            outfile.write(infile.read())
+                        outfile.write("\n\n\n")
+                    except Exception as e:
+                        outfile.write(f"*** Error reading file: {e} ***\n\n\n")
+            outfile.write("--- EXCLUDED FILES ---\n")
+            for f in sorted(excluded_files):
+                outfile.write(f + "\n")
+            outfile.write("--- EXCLUDED DIRECTORIES ---\n")
+            for d in sorted(excluded_dirs_log):
+                outfile.write(d + "\n")
+            outfile.write("--- SCANNED DIRECTORIES ---\n")
+            for d in sorted(scanned_dirs):
+                outfile.write(d + "\n")
+            outfile.write("--- SCANNED FILES ---\n")
+            for f in sorted(scanned_files):
+                outfile.write(f + "\n")
+
+    except Exception as e:
+        raise RuntimeError(f"Error writing output file: {e}")
+    stats = {
+        "included": len(included_files),
+        "excluded": len(excluded_files),
+        "scanned_dirs": len(scanned_dirs),
+        "scanned_files": len(scanned_files),
+    }
+    return output_file, stats
+def run_gui_mode():
+    show_info("Code Documenter", "Please select the project directory to document.")
+    project_dir = ask_directory("Select Project Directory")
     if not project_dir:
         print("No directory selected. Exiting.")
         return
-
-    # --- 2. Prompt user to select the output file ---
-    show_info(
-        "Code Documenter",
-        "Please select where to save the combined text file."
-    )
-    output_file = ask_save_file(title="Save Documentation File As...")
-
-    if not output_file:
-        print("No output file selected. Exiting.")
-        return
-
-    # --- 3. Walk directory and write files ---
-    print(f"Starting documentation...\nProject Directory: {project_dir}\nOutput File: {output_file}")
-    
-    code_file_count = 0
-    media_files_found = []
-
     try:
-        with open(output_file, 'w', encoding='utf-8') as outfile:
-            for dirpath, dirnames, filenames in os.walk(project_dir, topdown=True):
-                
-                # --- Prune excluded directories ---
-                dirnames[:] = [d for d in dirnames if d not in EXCLUDED_DIRS]
-                
-                for filename in filenames:
-                    if filename in EXCLUDED_FILES:
-                        continue
-                        
-                    file_ext = os.path.splitext(filename)[1].lower()
-                    if not file_ext and filename.lower() == 'dockerfile':
-                        file_ext = 'dockerfile' # Handle extensionless files
-                    
-                    file_path = os.path.join(dirpath, filename)
-                    relative_path = os.path.relpath(file_path, project_dir)
-                    
-                    if file_ext in CODE_EXTENSIONS:
-                        print(f"Processing Code: {relative_path}")
-                        
-                        outfile.write("=" * 80 + "\n")
-                        outfile.write(f"--- FILE: {relative_path} ---\n")
-                        outfile.write("=" * 80 + "\n\n")
-                        
-                        try:
-                            with open(file_path, 'r', encoding='utf-8', errors='ignore') as infile:
-                                content = infile.read()
-                                outfile.write(content)
-                            
-                            outfile.write("\n\n\n")
-                            code_file_count += 1
-                            
-                        except Exception as e:
-                            print(f"  Error reading {file_path}: {e}")
-                            outfile.write(f"*** Error reading file: {e} ***\n\n\n")
-
-                    elif file_ext in MEDIA_EXTENSIONS:
-                        print(f"Found Asset: {relative_path}")
-                        media_files_found.append(relative_path)
-
+        output_file, stats = document_project_core(project_dir)
     except Exception as e:
-        print(f"An error occurred while writing the output file: {e}")
-        show_error("Error", f"An error occurred: {e}")
+        show_error("Error", str(e))
         return
-
-    if media_files_found:
-        print(f"Appending {len(media_files_found)} asset file paths...")
-        try:
-            with open(output_file, 'a', encoding='utf-8') as outfile:
-                outfile.write("\n\n" + "#" * 80 + "\n")
-                outfile.write(f"--- ASSET / MEDIA FILE LIST ({len(media_files_found)} files) ---\n")
-                outfile.write("#" * 80 + "\n\n")
-                
-                media_files_found.sort()
-                for relative_path in media_files_found:
-                    outfile.write(f"{relative_path}\n")
-                    
-        except Exception as e:
-            print(f"An error occurred while appending media file list: {e}")
-            show_error("Error", f"An error occurred while appending media list: {e}")
-
-    success_message = (
-        f"Documentation complete!\n\n"
-        f"Processed {code_file_count} code files.\n"
-        f"Found {len(media_files_found)} asset/media files.\n\n"
+    msg = (
+        f"Documentation complete.\n\n"
+        f"Included files:  {stats['included']}\n"
+        f"Excluded files:  {stats['excluded']}\n"
+        f"Scanned dirs:    {stats['scanned_dirs']}\n"
+        f"Scanned files:   {stats['scanned_files']}\n\n"
         f"Saved to: {output_file}"
     )
-    print(success_message)
-    show_info("Success", success_message)
+    print(msg)
+    script_name = os.path.basename(sys.argv[0])
+    cli_command = f'python {script_name} --cli --path "{project_dir}"'
+    print("\n" + "="*60)
+    print("RUN VIA CLI NEXT TIME USING THIS EXACT COMMAND:")
+    print(cli_command)
+    print("="*60 + "\n")
+    show_info("Success", msg)
+
+def run_cli_mode(args):
+    if not args.path:
+        print("ERROR: --path is required when using --cli")
+        sys.exit(1)
+    project_dir = args.path
+    try:
+        output_file, stats = document_project_core(project_dir)
+    except Exception as e:
+        print(f"ERROR: {e}")
+        sys.exit(1)
+
+    print("\nDocumentation complete.")
+    print(f"Included files:  {stats['included']}")
+    print(f"Excluded files:  {stats['excluded']}")
+    print(f"Scanned dirs:    {stats['scanned_dirs']}")
+    print(f"Scanned files:   {stats['scanned_files']}")
+    print(f"Saved to:        {output_file}\n")
+
+def main():
+    parser = argparse.ArgumentParser(description="Project Code Documentor")
+    parser.add_argument("--cli", action="store_true", help="Run in CLI mode (no GUI)")
+    parser.add_argument("--path", help="Project directory path (required in CLI mode)")
+    args = parser.parse_args()
+    if args.cli:
+        run_cli_mode(args)
+    else:
+        try:
+            _get_tkinter_root()
+        except tk.TclError:
+            print(
+                "ERROR: GUI not available. Use CLI mode: python documentor.py --cli --path <dir>"
+            )
+            sys.exit(1)
+        run_gui_mode()
 
 if __name__ == "__main__":
-    if sys.platform != "darwin": # Don't hide root on macOS, it can cause issues
-        try:
-            _setup_tkinter_root()
-        except tk.TclError:
-            print("Could not initialize GUI. Are you in a headless environment?")
-            sys.exit(1)
-            
-    document_code_files()
+    main()
