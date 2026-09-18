@@ -19,8 +19,10 @@ import argparse
 import tkinter as tk
 from tkinter import filedialog, messagebox
 from datetime import datetime
+
 STATIC_OUTPUT_BASE = "/home/kushal/Desktop/Projects/Document_Project/output_docs"
 
+# Dirs to exclude (still useful for performance so we don't traverse node_modules)
 EXCLUDED_DIRS = {
     "node_modules", "venv", ".venv", ".git", "__pycache__",
     ".vscode", ".idea", "build", "dist", "target", "env",
@@ -37,10 +39,11 @@ EXCLUDED_EXTENSIONS = {
     ".mp3", ".wav", ".ogg", ".flac", ".mp4", ".webm", ".mkv", ".avi", ".mov",
     ".pdf", ".zip", ".tar", ".gz", ".rar", ".7z", ".dmg", ".exe", ".dll",
     ".pyc", ".pyo", ".class", ".o", ".so", ".dylib", ".wasm",
-    ".min.js", ".min.css", ".map",
+    ".min.js", ".min.css", ".map", ".env.example", ".env.local"
     ".env", ".pem", ".key", ".cert", ".p12",
 }
 
+# We keep specific files excluded to avoid massive text dumps like lockfiles
 EXCLUDED_FILES = {
     "package-lock.json", "yarn.lock", "poetry.lock", "pnpm-lock.yaml",
     "Pipfile.lock", "composer.lock", "Gemfile.lock", "cargo.lock",
@@ -56,6 +59,19 @@ TEST_PATTERNS = [
     re.compile(r"test_[^/\\]+\.[a-z]+$", re.IGNORECASE),
 ]
 
+def is_binary_file(filepath: str) -> bool:
+    """
+    Detects if a file is binary by checking for null bytes in the first 1024 bytes.
+    Matches Git's heuristic. Eliminates the need for extension blacklists.
+    """
+    try:
+        with open(filepath, 'rb') as f:
+            chunk = f.read(1024)
+            if b'\x00' in chunk:
+                return True
+    except Exception:
+        return True # Safely flag as binary if unreadable
+    return False
 
 def compress_whitespace(content: str) -> str:
     """
@@ -67,11 +83,9 @@ def compress_whitespace(content: str) -> str:
     compressed = re.sub(r"\n{3,}", "\n\n", "\n".join(lines))
     return compressed.strip()
 
-
 def xml_escape(text: str) -> str:
     """Minimal XML escaping — only the characters that break XML parsing."""
     return text.replace("]]>", "]]]]><![CDATA[>")
-
 
 def build_tree(project_dir: str, included_files: list[str]) -> str:
     """
@@ -88,9 +102,7 @@ def build_tree(project_dir: str, included_files: list[str]) -> str:
                 seen_dirs.add(dir_path)
                 tree_lines.append("  " * (i - 1) + parts[i - 1] + "/")
         tree_lines.append("  " * (len(parts) - 1) + parts[-1])
-
     return "\n".join(tree_lines)
-
 
 def document_project_core(
     project_dir: str,
@@ -119,55 +131,50 @@ def document_project_core(
     for dirpath, dirnames, filenames in os.walk(project_dir, topdown=True):
         removed = [d for d in dirnames if d in EXCLUDED_DIRS]
         for d in removed:
-            excluded_dirs_log.append(
-                os.path.relpath(os.path.join(dirpath, d), project_dir)
-            )
+            excluded_dirs_log.append(os.path.relpath(os.path.join(dirpath, d), project_dir))
         dirnames[:] = [d for d in dirnames if d not in EXCLUDED_DIRS]
+        
         for filename in filenames:
             full_path = os.path.join(dirpath, filename)
             rel_path = os.path.relpath(full_path, project_dir).replace("\\", "/")
-            ext = os.path.splitext(filename)[1].lower()
 
-            # Excluded by filename
             if filename in EXCLUDED_FILES:
                 excluded_files.append(rel_path)
                 print(f"  - {rel_path}  [excluded: filename]")
                 continue
 
-            # Excluded by extension
             if ext in EXCLUDED_EXTENSIONS:
                 excluded_files.append(rel_path)
                 print(f"  - {rel_path}  [excluded: extension {ext}]")
                 continue
 
-            # Excluded test/spec files
             if not include_tests and any(p.search(filename) for p in TEST_PATTERNS):
                 excluded_files.append(rel_path)
                 print(f"  - {rel_path}  [excluded: test/spec file]")
                 continue
 
-            # Try reading the file
+            # Core fix: Heuristic binary check
+            if is_binary_file(full_path):
+                excluded_files.append(rel_path)
+                print(f"  - {rel_path}  [excluded: detected binary]")
+                continue
+
             try:
                 with open(full_path, "r", encoding="utf-8", errors="ignore") as fh:
-                    raw = fh.read()
+                    content = fh.read()
             except Exception as e:
-                print(f"  ⚠ Could not read: {rel_path} ({e})")
                 excluded_files.append(rel_path)
                 print(f"  - {rel_path}  [excluded: could not read]")
                 continue
 
-            content = raw
-
             if compress_ws:
                 content = compress_whitespace(content)
 
-            # Exclude empty files
             if not content.strip():
                 excluded_files.append(rel_path + "  [empty after processing]")
                 print(f"  - {rel_path}  [excluded: empty after processing]")
                 continue
 
-            # Included
             included_files.append(rel_path)
             file_entries.append((rel_path, content))
             print(f"  + {rel_path}")
@@ -184,15 +191,14 @@ def document_project_core(
 
             out.write("<structure>\n")
             out.write(f"<![CDATA[\n{tree_str}\n]]>\n")
-            out.write("</structure>\n\n")
-            out.write("<files>\n\n")
+            out.write("</structure>\n\n<files>\n\n")
+            
             for rel_path, content in file_entries:
                 ext = os.path.splitext(rel_path)[1].lstrip(".")
                 out.write(f'<file path="{rel_path}" lang="{ext}">\n')
-                out.write(f"<![CDATA[\n{xml_escape(content)}\n]]>\n")
-                out.write("</file>\n\n")
-            out.write("</files>\n\n")
-            out.write("<meta>\n")
+                out.write(f"<![CDATA[\n{xml_escape(content)}\n]]>\n</file>\n\n")
+                
+            out.write("</files>\n\n<meta>\n")
             out.write(f"  <included_count>{len(included_files)}</included_count>\n")
             out.write(f"  <excluded_count>{len(excluded_files)}</excluded_count>\n")
             if excluded_files:
@@ -200,19 +206,16 @@ def document_project_core(
                 for f in sorted(excluded_files):
                     out.write(f"    <f>{f}</f>\n")
                 out.write("  </excluded>\n")
-            out.write("</meta>\n\n")
-            out.write("</project>\n")
+            out.write("</meta>\n\n</project>\n")
 
     except Exception as e:
         raise RuntimeError(f"Failed to write output file: {e}")
 
-    stats = {
+    return output_file, {
         "included": len(included_files),
         "excluded": len(excluded_files),
         "excluded_dirs": len(excluded_dirs_log),
     }
-    return output_file, stats
-
 def _get_tkinter_root():
     if tk._default_root:
         return tk._default_root
@@ -268,7 +271,6 @@ def run_gui_mode(args):
     print("=" * 60 + "\n")
     show_info("Success", msg)
 
-
 def run_cli_mode(args):
     if not args.path:
         print("ERROR: --path is required in CLI mode.")
@@ -280,6 +282,7 @@ def run_cli_mode(args):
             include_tests=args.include_tests,
             output_dir_override=args.output_dir,
         )
+        print(f"\nDone.\n  Included : {stats['included']} files\n  Excluded : {stats['excluded']} files\n  Saved to : {output_file}\n")
     except Exception as e:
         print(f"ERROR: {e}")
         sys.exit(1)
@@ -287,7 +290,6 @@ def run_cli_mode(args):
     print(f"  Included : {stats['included']} files")
     print(f"  Excluded : {stats['excluded']} files")
     print(f"  Saved to : {output_file}\n")
-
 
 def main():
     parser = argparse.ArgumentParser(
