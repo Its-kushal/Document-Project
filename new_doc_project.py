@@ -127,30 +127,47 @@ def document_project_core(
             full_path = os.path.join(dirpath, filename)
             rel_path = os.path.relpath(full_path, project_dir).replace("\\", "/")
             ext = os.path.splitext(filename)[1].lower()
+
+            # Excluded by filename
             if filename in EXCLUDED_FILES:
                 excluded_files.append(rel_path)
+                print(f"  - {rel_path}  [excluded: filename]")
                 continue
+
+            # Excluded by extension
             if ext in EXCLUDED_EXTENSIONS:
                 excluded_files.append(rel_path)
+                print(f"  - {rel_path}  [excluded: extension {ext}]")
                 continue
+
+            # Excluded test/spec files
             if not include_tests and any(p.search(filename) for p in TEST_PATTERNS):
                 excluded_files.append(rel_path)
+                print(f"  - {rel_path}  [excluded: test/spec file]")
                 continue
+
+            # Try reading the file
             try:
                 with open(full_path, "r", encoding="utf-8", errors="ignore") as fh:
                     raw = fh.read()
             except Exception as e:
                 print(f"  ⚠ Could not read: {rel_path} ({e})")
                 excluded_files.append(rel_path)
+                print(f"  - {rel_path}  [excluded: could not read]")
                 continue
 
             content = raw
+
             if compress_ws:
                 content = compress_whitespace(content)
+
+            # Exclude empty files
             if not content.strip():
                 excluded_files.append(rel_path + "  [empty after processing]")
+                print(f"  - {rel_path}  [excluded: empty after processing]")
                 continue
 
+            # Included
             included_files.append(rel_path)
             file_entries.append((rel_path, content))
             print(f"  + {rel_path}")
