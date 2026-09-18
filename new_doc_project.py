@@ -137,6 +137,7 @@ def document_project_core(
         for filename in filenames:
             full_path = os.path.join(dirpath, filename)
             rel_path = os.path.relpath(full_path, project_dir).replace("\\", "/")
+            ext = os.path.splitext(filename)[1].lower()
 
             if filename in EXCLUDED_FILES:
                 excluded_files.append(rel_path)
