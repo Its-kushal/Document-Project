@@ -28,19 +28,18 @@ EXCLUDED_DIRS = {
     ".vscode", ".idea", "build", "dist", "target", "env",
     "output_docs", ".next", ".nuxt", ".svelte-kit", ".parcel-cache",
     "coverage", ".pytest_cache", ".mypy_cache", ".ruff_cache",
-    "htmlcov", ".turbo", ".vercel", ".netlify",
+    "htmlcov", ".turbo", ".vercel", ".netlify", ".expo", "android"
 }
 
 EXCLUDED_EXTENSIONS = {
     ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".svg", ".webp", ".ico",
-    ".tiff", ".tif", ".psd", ".ai", ".eps",
+    ".tiff", ".tif", ".psd", ".ai", ".eps", ".log", ""
     ".csv", ".sqlite", ".db", ".parquet", ".pkl", ".pickle",
     ".ttf", ".otf", ".woff", ".woff2", ".eot",
     ".mp3", ".wav", ".ogg", ".flac", ".mp4", ".webm", ".mkv", ".avi", ".mov",
     ".pdf", ".zip", ".tar", ".gz", ".rar", ".7z", ".dmg", ".exe", ".dll",
     ".pyc", ".pyo", ".class", ".o", ".so", ".dylib", ".wasm",
-    ".min.js", ".min.css", ".map", ".env.example", ".env.local"
-    ".env", ".pem", ".key", ".cert", ".p12",
+    ".min.js", ".min.css", ".map", ".pem", ".key", ".cert", ".p12",
 }
 
 # We keep specific files excluded to avoid massive text dumps like lockfiles
