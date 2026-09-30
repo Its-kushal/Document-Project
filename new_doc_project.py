@@ -49,6 +49,7 @@ EXCLUDED_FILES = {
     ".env", ".env.local", ".env.production", ".env.development",
     ".DS_Store", "Thumbs.db", ".gitignore", ".gitattributes",
     ".editorconfig", ".prettierignore", ".eslintignore",
+    "master-prompt.txt", "ideas.txt"
 }
 
 TEST_PATTERNS = [
