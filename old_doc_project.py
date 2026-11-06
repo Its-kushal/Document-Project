@@ -20,7 +20,7 @@ import tkinter as tk
 from tkinter import filedialog, messagebox
 from datetime import datetime
 
-STATIC_OUTPUT_BASE = "/home/kushal/Desktop/Projects/Document_Project/output_docs"
+STATIC_OUTPUT_BASE = r"D:\Projects\Document_Project\output_docs"
 
 # Dirs to exclude (still useful for performance so we don't traverse node_modules)
 EXCLUDED_DIRS = {

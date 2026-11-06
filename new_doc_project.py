@@ -25,7 +25,7 @@ import tkinter as tk
 from tkinter import filedialog, messagebox
 from datetime import datetime, timezone
 
-STATIC_OUTPUT_BASE = "/home/kushal/Desktop/Projects/Document_Project/output_docs"
+STATIC_OUTPUT_BASE = r"D:\Projects\Document_Project\output_docs"
 DEFAULT_MAX_FILE_KB = 256
 
 # Directories always excluded during traversal
